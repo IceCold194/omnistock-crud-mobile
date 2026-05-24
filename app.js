@@ -8,7 +8,7 @@ app.use(express.json());
 const db = new sqlite3.Database('./omnistock.db');
 const PORT = 3000;
 
-// UPGRADED UI ROUTE: Serves a mobile-responsive dashboard directly to the browser
+// Serves the fully featured, mobile-responsive dashboard with full CRUD capabilities
 app.get('/', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -24,6 +24,7 @@ app.get('/', (req, res) => {
             </style>
         </head>
         <body class="text-slate-800 antialiased">
+            <!-- Top Navigation Bar -->
             <nav class="bg-white border-b border-slate-200 sticky top-0 z-50">
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div class="flex justify-between h-16">
@@ -39,17 +40,24 @@ app.get('/', (req, res) => {
                 </div>
             </nav>
 
+            <!-- Main Dashboard Container -->
             <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <!-- Header Segment -->
                 <div class="mb-8">
                     <h1 class="text-2xl font-bold text-slate-900 sm:text-3xl tracking-tight">Product Management</h1>
                     <p class="mt-1 text-sm text-slate-500">Maintain and audit local retail merchandise records before cloud sync deployment.</p>
                 </div>
 
+                <!-- Responsive Grid Layout -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Form Section -->
                     <div class="lg:col-span-1">
                         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 sticky top-24">
-                            <h2 class="text-lg font-semibold text-slate-900 mb-5">Register Product</h2>
+                            <h2 id="formTitle" class="text-lg font-semibold text-slate-900 mb-5">Register Product</h2>
                             <form id="productForm" class="space-y-4">
+                                <!-- Hidden field to track the product currently being edited -->
+                                <input type="hidden" id="editing_id" value="">
+
                                 <div>
                                     <label class="block text-xs font-semibold tracking-wider text-slate-500 uppercase mb-1">SKU Code</label>
                                     <input type="text" id="sku_code" class="w-full rounded-lg border-slate-200 bg-slate-50 p-2.5 text-sm font-mono border focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition" required placeholder="SKU-XXXX">
@@ -72,13 +80,20 @@ app.get('/', (req, res) => {
                                         <input type="number" id="reorder_point" class="w-full rounded-lg border-slate-200 bg-slate-50 p-2.5 text-sm border focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition" value="10">
                                     </div>
                                 </div>
-                                <button type="submit" class="w-full mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2.5 px-4 rounded-lg shadow-sm hover:shadow transition duration-150 flex items-center justify-center gap-2">
-                                    Commit to Storage
-                                </button>
+                                
+                                <div class="space-y-2">
+                                    <button type="submit" id="submitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2.5 px-4 rounded-lg shadow-sm hover:shadow transition duration-150 flex items-center justify-center gap-2">
+                                        Commit to Storage
+                                    </button>
+                                    <button type="button" id="cancelBtn" onclick="resetFormState()" class="hidden w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-sm py-2.5 px-4 rounded-lg transition duration-150 flex items-center justify-center gap-2">
+                                        Cancel Edit
+                                    </button>
+                                </div>
                             </form>
                         </div>
                     </div>
 
+                    <!-- Data Grid Section -->
                     <div class="lg:col-span-2">
                         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                             <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
@@ -88,6 +103,7 @@ app.get('/', (req, res) => {
                                 </button>
                             </div>
                             
+                            <!-- Mobile Responsive Scroll Container -->
                             <div class="overflow-x-auto">
                                 <table class="w-full text-left border-collapse whitespace-nowrap">
                                     <thead>
@@ -96,11 +112,12 @@ app.get('/', (req, res) => {
                                             <th class="px-6 py-3">Item Specification</th>
                                             <th class="px-6 py-3">Retail Price</th>
                                             <th class="px-6 py-3 text-center">Reorder Point</th>
-                                            <th class="px-6 py-3 text-right">Action</th>
+                                            <th class="px-6 py-3 text-right">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody id="productTableBody" class="divide-y divide-slate-100 text-sm">
-                                        </tbody>
+                                        <!-- Rows injected dynamically via Javascript -->
+                                    </tbody>
                                 </table>
                             </div>
                         </div>
@@ -109,9 +126,11 @@ app.get('/', (req, res) => {
             </main>
 
             <script>
-                // Handle Form Submissions (CREATE)
+                // Handle Form Submissions (CREATE & UPDATE)
                 document.getElementById('productForm').addEventListener('submit', async (e) => {
                     e.preventDefault();
+                    
+                    const id = document.getElementById('editing_id').value;
                     const data = {
                         sku_code: document.getElementById('sku_code').value,
                         product_name: document.getElementById('product_name').value,
@@ -120,15 +139,23 @@ app.get('/', (req, res) => {
                         reorder_point: parseInt(document.getElementById('reorder_point').value)
                     };
 
-                    const response = await fetch('/api/products', {
-                        method: 'POST',
+                    let url = '/api/products';
+                    let method = 'POST';
+
+                    // If an ID exists, we execute an UPDATE operation instead
+                    if (id) {
+                        url = '/api/products/' + id;
+                        method = 'PUT';
+                    }
+
+                    const response = await fetch(url, {
+                        method: method,
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(data)
                     });
 
                     if (response.ok) {
-                        document.getElementById('productForm').reset();
-                        document.getElementById('reorder_point').value = 10;
+                        resetFormState();
                         loadProducts();
                     } else {
                         const err = await response.json();
@@ -161,7 +188,10 @@ app.get('/', (req, res) => {
                             <td class="px-6 py-4 font-medium text-slate-900">\${p.product_name}</td>
                             <td class="px-6 py-4 font-semibold text-slate-700">Php \${parseFloat(p.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             <td class="px-6 py-4 text-center"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200">\${p.reorder_point}</span></td>
-                            <td class="px-6 py-4 text-right">
+                            <td class="px-6 py-4 text-right space-x-2">
+                                <button onclick="startEdit('\${p.product_id}', '\${p.sku_code}', '\${p.product_name}', '\${p.barcode || ""}', \${p.unit_price}, \${p.reorder_point})" class="text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 hover:bg-indigo-100 hover:text-indigo-700 transition">
+                                    Edit
+                                </button>
                                 <button onclick="deleteProduct('\${p.product_id}')" class="text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-1.5 hover:bg-rose-100 hover:text-rose-700 transition">
                                     Purge
                                 </button>
@@ -169,6 +199,32 @@ app.get('/', (req, res) => {
                         \`;
                         tbody.appendChild(tr);
                     });
+                }
+
+                // Transition the visual form into Update State
+                function startEdit(id, sku, name, barcode, price, reorder) {
+                    document.getElementById('editing_id').value = id;
+                    document.getElementById('sku_code').value = sku;
+                    document.getElementById('product_name').value = name;
+                    document.getElementById('barcode').value = barcode;
+                    document.getElementById('unit_price').value = price;
+                    document.getElementById('reorder_point').value = reorder;
+
+                    // Alter titles and labels to indicate update mode
+                    document.getElementById('formTitle').innerText = 'Modify Product';
+                    document.getElementById('submitBtn').innerText = 'Save Changes';
+                    document.getElementById('cancelBtn').classList.remove('hidden');
+                }
+
+                // Restore form elements back to default registration states
+                function resetFormState() {
+                    document.getElementById('productForm').reset();
+                    document.getElementById('editing_id').value = '';
+                    document.getElementById('reorder_point').value = 10;
+
+                    document.getElementById('formTitle').innerText = 'Register Product';
+                    document.getElementById('submitBtn').innerText = 'Commit to Storage';
+                    document.getElementById('cancelBtn').classList.add('hidden');
                 }
 
                 // Delete Entry Handling (DELETE)
